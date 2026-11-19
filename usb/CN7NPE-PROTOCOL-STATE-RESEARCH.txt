@@ -1,0 +1,5 @@
+CN7NPE diagnostic protocol state collector 0.3.2-local
+This is NOT an exhaust flap controller.
+Reads only the two exact possible paths of the stock saved protocol cache.
+No ECU request, cache creation, or internal-storage write is performed.
+The collected cache is private and is not a live ECU response.

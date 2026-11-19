@@ -10,6 +10,8 @@ TRANSPORT_VERSION = "0.3.0"
 TRANSPORT_ASSET = f"NEMESIS-CN7NPE-Exhaust-Transport-Research-v{TRANSPORT_VERSION}-USB.zip"
 HCAN_SERVICE_VERSION = "0.3.1"
 HCAN_SERVICE_ASSET = f"NEMESIS-CN7NPE-Exhaust-HCAN-Service-Research-v{HCAN_SERVICE_VERSION}-USB.zip"
+PROTOCOL_STATE_VERSION = "0.3.2-local"
+PROTOCOL_STATE_ASSET = f"NEMESIS-CN7NPE-Exhaust-Protocol-State-Research-v{PROTOCOL_STATE_VERSION}-USB.zip"
 FILES = {
     "NEMESIS.data": ROOT / "usb/NEMESIS.data",
     "collect.sh": ROOT / "usb/collect.sh",
@@ -20,15 +22,27 @@ FILES = {
 }
 
 
-def build(destination=None, services=False, transport=False, hcan_service=False):
-    if sum((services, transport, hcan_service)) > 1:
+def build(destination=None, services=False, transport=False, hcan_service=False, protocol_state=False):
+    if sum((services, transport, hcan_service, protocol_state)) > 1:
         raise ValueError("Choose one collection profile")
     destination = Path(destination) if destination else ROOT / "dist"
     destination.mkdir(parents=True, exist_ok=True)
     asset_name = ASSET.replace("Exhaust-Research", "Exhaust-Service-Research") if services else ASSET
     archive = destination / asset_name
     files = dict(FILES)
-    if hcan_service:
+    if protocol_state:
+        asset_name = PROTOCOL_STATE_ASSET
+        archive = destination / asset_name
+        files = {
+            "NEMESIS.data": ROOT / "usb/NEMESIS-protocol-state.data",
+            "collect-protocol-state.sh": ROOT / "usb/collect-protocol-state.sh",
+            "progress.sh": ROOT / "usb/progress.sh",
+            "CN7NPE-EXHAUST-RESEARCH.txt": ROOT / "usb/CN7NPE-PROTOCOL-STATE-RESEARCH.txt",
+            "INSTALL-KO.md": ROOT / "usb/INSTALL-PROTOCOL-STATE-KO.md",
+            "pc/decode_protocol_state.py": ROOT / "tools/decode_protocol_state.py",
+            "LICENSE": ROOT / "LICENSE",
+        }
+    elif hcan_service:
         asset_name = HCAN_SERVICE_ASSET
         archive = destination / asset_name
         files = {
@@ -74,7 +88,9 @@ if __name__ == "__main__":
     profiles.add_argument("--services", action="store_true")
     profiles.add_argument("--transport", action="store_true")
     profiles.add_argument("--hcan-service", action="store_true")
+    profiles.add_argument("--protocol-state", action="store_true")
     args = parser.parse_args()
-    archive, digest = build(services=args.services, transport=args.transport, hcan_service=args.hcan_service)
+    archive, digest = build(services=args.services, transport=args.transport, hcan_service=args.hcan_service,
+                           protocol_state=args.protocol_state)
     print(archive)
     print(digest)
