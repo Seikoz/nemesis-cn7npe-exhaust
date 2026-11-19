@@ -54,7 +54,13 @@ HCAN 확장의 `TM_HSCANAdapter`는 등록된 `tm_hscan_service`의 `ITM_HSCANSe
 - `setCanSignalValue()`도 서비스 호출입니다. 인접한 `CAN_SIGNAL_TYPE` 상수는 속도·RPM·주행거리·등록 상태 항목이며, AEV 강제 개폐 항목은 확인되지 않았습니다. 이 상수 목록이 모든 하위 기능을 설명한다고 단정하지 않습니다.
 - 수집된 HCAN 확장과 검사한 프레임워크의 메서드·클래스 목록에서는 이 서비스의 실제 처리 구현을 확인하지 못했습니다. 실제 서비스 등록은 수집 목록에서 확인했으나, 등록만으로 구현 파일이나 제어 범위를 알 수는 없습니다.
 
-따라서 다음 경계는 **`tm_hscan_service`의 실제 구현과 MICOM 펌웨어의 처리 규격**입니다. 서비스 이름·프로세스 이름만으로 특정 APK가 소유한다고 추정하지 않습니다.
+이후 기존 `framework2.odex`의 문자열 참조를 추적해 **HCAN 서비스 구현을 로드하는 위치를 확인했습니다.** `com.hkmc.internal.server.HkmcSystemServer`는 `Loader.getInfobankJar()`를 사용하여 `com.hkmc.telematics.hscan.TM_HSCANService`를 불러오고, Context 생성자를 통해 인스턴스를 만들어 시스템 준비 단계에서 사용합니다.
+
+`Loader`의 Infobank 클래스 경로는 기존 `automotive.jar`와 **`/system/framework/com.infobank.jar`**의 조합입니다. 이미 검사한 automotive 코드에는 해당 구현 클래스가 없으며, 기존 파일 목록에는 `com.infobank.jar`와 `com.infobank.odex`가 모두 존재합니다. 따라서 이 두 파일이 다음 분석 대상입니다. 이는 APK 이름 추측이나 전체 앱 검색이 아니라 대상 펌웨어의 로더 코드에서 좁힌 경로입니다. 실제 서비스 등록과 메서드 본문은 이 파일을 확보한 뒤 확인해야 합니다.
+
+같은 Loader는 Infobank의 JNI 경로 값으로 `/system/lib/libautoframework_jni.so`를 사용합니다. 이 때문에 해당 라이브러리를 선택 수집 대상으로 포함했습니다. **이 경로 값만으로 HCAN 진단이 JNI를 반드시 통한다거나 라이브러리 안에 ECU 중계가 있다고 확정하지 않습니다.**
+
+이번 로더 분석은 framework2를 API 17로 deodex한 뒤 관련 두 클래스를 재조립하고 JADX 결과와 smali를 대조했습니다. 해당 deodex 로그에는 오류가 없었습니다. OEM 원본과 복원 코드는 공개하지 않습니다.
 
 ## 네이티브 전달 경로와 한계
 
@@ -77,3 +83,9 @@ HCAN 확장의 `TM_HSCANAdapter`는 등록된 `tm_hscan_service`의 `ITM_HSCANSe
 이번에는 큰 N 모드 APK를 다시 복사하지 않으며, 파일당 8MiB·복사 코드 합계 24MiB로 제한합니다. Android 4.4 기본 toolbox에 없는 `wc`/`tr`/`stat`에 의존하지 않고 `ls -ln`의 크기 필드를 확인합니다. Android와 GNU의 출력 차이를 모의 테스트로 검증합니다. 기본 도구 목록과 출력 형식은 [AOSP KitKat toolbox](https://github.com/aosp-mirror/platform_system_core/blob/android-4.4.2_r1/toolbox/Android.mk), [ls 구현](https://github.com/aosp-mirror/platform_system_core/blob/android-4.4.2_r1/toolbox/ls.c)을 대조했습니다.
 
 보완 추출로 **내비의 MICOM 송신 계층에서 네이티브 UART 전달까지** 확인 범위를 넓혔습니다. 그러나 HCAN 서비스의 실제 처리부, MICOM 펌웨어의 ECU 중계, 대상 AEV의 강제 열림·닫힘·제어 해제 명령과 피드백은 아직 확인되지 않았습니다. 추가 하드웨어 없는 제어의 가능성은 미확정이며, 세 가지 AEV 제어를 제공하는 패키지는 아직 구현하지 않았습니다.
+
+## v0.3.1: 확인된 구현 컨테이너만 추가 수집
+
+[HCAN 서비스 보완 추출 안내](../usb/INSTALL-HCAN-SERVICE-KO.md)의 새 프로필은 `com.infobank.jar`, `com.infobank.odex`, 선택 파일 `libautoframework_jni.so`의 **고정된 세 경로만** 확인합니다. 이미 받은 파일은 반복 수집하지 않으며, 디렉터리 검색·서비스 목록·프로세스 목록·MICOM 펌웨어 덤프는 하지 않습니다. 파일당 8MiB, 복사 합계 16MiB 제한입니다.
+
+Infobank 코드가 확보되면 `tm_hscan_service` 등록, `requestDiag`와 `setCanSignalValue`의 실제 분기·권한 검사, MICOM 헤더·응답 처리, 하위 JNI 사용 여부를 확인합니다. 여기서도 ECU 중계나 AEV 기능이 드러나지 않으면 그 부분은 미확인으로 남깁니다. MICOM 플래시 읽기나 부트로더 진입을 이 수집기로 시도하지 않습니다.

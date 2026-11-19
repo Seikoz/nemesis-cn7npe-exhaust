@@ -1,0 +1,4 @@
+CN7NPE exhaust HCAN service research collector 0.3.1
+This is NOT an exhaust flap controller.
+It checks only Infobank JAR/ODEX and the optional loader-referenced JNI library.
+Collected stock code is private. Do not publish it in a repository or issue.

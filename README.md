@@ -1,15 +1,17 @@
 # CN7NPE 배기 플랩 제어 연구
 
-**현재 v0.3.0은 MICOM·HCAN 통신 경로를 보완 추출하는 분석 도구입니다. 플랩 열림·닫힘·순정 자동 제어는 구현되지 않았습니다.**
+**현재 v0.3.1은 HCAN 서비스 구현 파일을 보완 추출하는 분석 도구입니다. 플랩 열림·닫힘·순정 자동 제어는 구현되지 않았습니다.**
 제어 명령과 실차 동작이 확인되지 않아 제어 기능을 제공하는 릴리스는 아직 만들 수 없습니다.
 
 목표는 한국형 아반떼 N 페이스리프트의 배기 플랩을 **열림 / 닫힘 / 순정 자동 복귀**로 제어하는 NEMESIS 패키지입니다. 순정 N Custom의 배기음 단계 변경을 플랩 강제 개폐라고 표시하지 않습니다.
 
 ## 현재 다운로드
 
-[MICOM·HCAN 보완 추출 USB ZIP v0.3.0](https://github.com/Seikoz/nemesis-cn7npe-exhaust/releases/tag/v0.3.0-research)
+[HCAN 서비스 구현 보완 추출 USB ZIP v0.3.1](https://github.com/Seikoz/nemesis-cn7npe-exhaust/releases/tag/v0.3.1-research)
 
-기존 `automotive-service`까지 추출한 분은 **v0.3.0 통신 경로 보완 ZIP**을 사용하세요. HCAN 확장·Engineering Mode ODEX·관련 네이티브 파일을 확인하며 파일당 8MiB, 복사 코드 합계 24MiB로 제한합니다. 큰 N 모드 APK는 다시 복사하지 않습니다. [사용법](usb/INSTALL-TRANSPORT-KO.md) · [추가 하드웨어 없는 경로 분석](docs/MICOM-SOFTWARE-PATH-KO.md)
+v0.3.0까지 수집한 분은 **v0.3.1 HCAN 서비스 보완 ZIP**을 사용하세요. 기존 framework2의 서비스 로더에서 확인한 `com.infobank.jar/.odex`와 선택 JNI 라이브러리 **세 경로만** 확인합니다. 파일당 8MiB, 복사 합계 16MiB로 제한하며 기존 자료는 다시 복사하지 않습니다. [사용법](usb/INSTALL-HCAN-SERVICE-KO.md) · [추가 하드웨어 없는 경로 분석](docs/MICOM-SOFTWARE-PATH-KO.md)
+
+`automotive-service`까지만 확보했다면 [v0.3.0 통신 경로 보완 ZIP](https://github.com/Seikoz/nemesis-cn7npe-exhaust/releases/tag/v0.3.0-research)을 먼저 사용합니다. HCAN 확장·Engineering Mode ODEX·관련 네이티브 파일용입니다. [v0.3.0 사용법](usb/INSTALL-TRANSPORT-KO.md)
 
 `automotive-service`가 아직 없다면 [이전 차량 서비스 보완 추출 v0.2.1](https://github.com/Seikoz/nemesis-cn7npe-exhaust/releases/tag/v0.2.1-research)을 먼저 사용합니다. [v0.2.1 사용법](usb/INSTALL-SERVICES-KO.md)
 
@@ -21,7 +23,7 @@
 | 대상 하드웨어 | TCC803x, NEMESIS 1.16.7 이상이 이미 정상 실행되는 Gen5W |
 | 분석 자료 추출 | USB에서 한 번 실행, 선택한 순정 파일을 USB에 복사 |
 | 플랩 제어 API·값·자동 복귀 | 미확인 / 미구현 |
-| 실차 검증 | v0.2.1 파일 추출 완료 확인. v0.3.0 추출과 플랩 제어는 미검증 |
+| 실차 검증 | v0.2.1·v0.3.0 파일 추출 완료 확인. v0.3.1 추출과 플랩 제어는 미검증 |
 
 ## USB에서 분석 자료 만들기
 

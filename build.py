@@ -8,6 +8,8 @@ VERSION = "0.2.1"
 ASSET = f"NEMESIS-CN7NPE-Exhaust-Research-v{VERSION}-USB.zip"
 TRANSPORT_VERSION = "0.3.0"
 TRANSPORT_ASSET = f"NEMESIS-CN7NPE-Exhaust-Transport-Research-v{TRANSPORT_VERSION}-USB.zip"
+HCAN_SERVICE_VERSION = "0.3.1"
+HCAN_SERVICE_ASSET = f"NEMESIS-CN7NPE-Exhaust-HCAN-Service-Research-v{HCAN_SERVICE_VERSION}-USB.zip"
 FILES = {
     "NEMESIS.data": ROOT / "usb/NEMESIS.data",
     "collect.sh": ROOT / "usb/collect.sh",
@@ -18,15 +20,26 @@ FILES = {
 }
 
 
-def build(destination=None, services=False, transport=False):
-    if services and transport:
+def build(destination=None, services=False, transport=False, hcan_service=False):
+    if sum((services, transport, hcan_service)) > 1:
         raise ValueError("Choose one collection profile")
     destination = Path(destination) if destination else ROOT / "dist"
     destination.mkdir(parents=True, exist_ok=True)
     asset_name = ASSET.replace("Exhaust-Research", "Exhaust-Service-Research") if services else ASSET
     archive = destination / asset_name
     files = dict(FILES)
-    if transport:
+    if hcan_service:
+        asset_name = HCAN_SERVICE_ASSET
+        archive = destination / asset_name
+        files = {
+            "NEMESIS.data": ROOT / "usb/NEMESIS-hcan-service.data",
+            "collect-hcan-service.sh": ROOT / "usb/collect-hcan-service.sh",
+            "progress.sh": ROOT / "usb/progress.sh",
+            "CN7NPE-EXHAUST-RESEARCH.txt": ROOT / "usb/CN7NPE-HCAN-SERVICE-RESEARCH.txt",
+            "INSTALL-KO.md": ROOT / "usb/INSTALL-HCAN-SERVICE-KO.md",
+            "LICENSE": ROOT / "LICENSE",
+        }
+    elif transport:
         asset_name = TRANSPORT_ASSET
         archive = destination / asset_name
         files = {
@@ -60,7 +73,8 @@ if __name__ == "__main__":
     profiles = parser.add_mutually_exclusive_group()
     profiles.add_argument("--services", action="store_true")
     profiles.add_argument("--transport", action="store_true")
+    profiles.add_argument("--hcan-service", action="store_true")
     args = parser.parse_args()
-    archive, digest = build(services=args.services, transport=args.transport)
+    archive, digest = build(services=args.services, transport=args.transport, hcan_service=args.hcan_service)
     print(archive)
     print(digest)
