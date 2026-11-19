@@ -4,7 +4,7 @@
 
 **Android에서 일반 MICOM 메시지를 송신하는 인터페이스를 확인했습니다. 따라서 추가 하드웨어 없는 제어를 불가능하다고 단정할 수는 없습니다. 그러나 MICOM에서 엔진 ECU로 AEV 강제 제어를 전달하는 경로와 명령은 아직 확인되지 않았습니다.**
 
-이 문서는 추출한 `automotive.odex`와 `automotive-service.odex`의 정적 분석입니다. 새로 조사한 클래스는 API 17로 deodex·재조립 후 JADX에서 분석했으며 deodex·조립 로그 오류 없이 완료했습니다. 실차에서 Binder 호출, MICOM 송신, ECU 진단, 파형 측정은 수행하지 않았습니다. 원본 해시는 [기존 분석](EXHAUST-PATH-KO.md)에 기록되어 있습니다.
+이 문서는 추출한 `automotive.odex`, `automotive-service.odex`와 v0.3.0 보완 추출의 HCAN 확장·Engineering Mode·네이티브 데몬을 정적으로 분석한 결과입니다. 관련 Java 클래스는 API 17로 deodex·재조립 후 JADX에서 분석했습니다. Engineering Mode 전체 deodex에는 한 클래스의 해석 오류가 있어, 아래 결론에 사용하는 관련 클래스를 별도로 추출하여 오류 없이 재처리했습니다. 실차에서 Binder 호출, MICOM 송신, ECU 진단, 파형 측정은 수행하지 않았습니다. 기존 원본 해시는 [기존 분석](EXHAUST-PATH-KO.md)에 기록되어 있습니다.
 
 ## 경로별로 확인한 범위
 
@@ -12,9 +12,11 @@
 | --- | --- | --- |
 | `NModeManager → SystemService` | 순정 개별 주행모드 설정을 MICOM으로 전달 | 배기음 단계 설정이며 강제 열림/닫힘/제어 해제는 미확인 |
 | `IMicomDataService.sendMicomData()` | 송신·수신 모듈, 타입, 기능 두 바이트, 데이터 배열을 `MicomService → MicomPacketRunner`로 전달 | 일반 MICOM 메시지 송신 계층 존재. 엔진 ECU 진단 중계의 증거는 아님 |
-| `EngineeringModeService.requestDiagnose()` | 호출 식별자를 정리한 뒤 `SystemService.requestDiagnose()`에 위임 | payload 의미와 MICOM 이후 처리는 미확인 |
+| `EngineeringMode.requestDiagnose() → EngineeringModeService` | DTC 목록을 항목당 두 바이트로 변환하고 서비스에 위임 | 확인한 순정 호출부는 DTC 요청. AEV 액추에이터 시험은 미확인 |
 | `SystemService.requestDiagnose()` | MICOM 진단 모듈의 정보 요청 기능으로 바이트 배열 전달 | 임의 ECU 주소·CAN ID·UDS 요청을 전달하는 API로 검증되지 않음 |
-| `HscanMicomService.sendPacket()` | MICOM 준비 여부를 확인한 뒤 같은 MICOM 송신 계층으로 위임 | CAN 프레임을 직접 송신하는 구현으로 볼 근거 없음. `hscand`와 HCAN 확장 분석 필요 |
+| `HscanMicomService.sendPacket()` | MICOM 준비 여부를 확인한 뒤 같은 MICOM 송신 계층으로 위임 | CAN 프레임을 직접 송신하는 구현으로 볼 근거 없음 |
+| `TM_HSCANAdapter` | `requestDiag()`·`setCanSignalValue()`를 `tm_hscan_service`에 위임 | 클라이언트 프록시 확인. 서비스 실제 처리부와 AEV 항목은 미확인 |
+| `micomd` | 로컬 MICOM 메시지를 큐에 넣고 TTY로 기록하는 경로 확인 | Android 이후 UART 전달까지 추적. MICOM 펌웨어의 ECU 라우팅은 미확인 |
 | `setCanTestOnOff()` / `setVehicleInterfaceOnOff()` | 테스트/차량 인터페이스 상태를 바꾸는 별도 요청 | ECU 주소·데이터를 받는 중계 API나 AEV 명령으로 확인되지 않음. 실행하지 않음 |
 
 ## 일반 MICOM 송신 인터페이스
@@ -37,18 +39,30 @@
 
 `resetIndividualDriveModeInstance()`의 캐시 초기화, Factory `RunSoundControl` ACK도 기존 분석과 같이 AEV 강제 제어 또는 해제 근거로 사용하지 않습니다.
 
-## HCAN 쪽이 다음 확인 대상인 이유
+보완 추출에서 `EngineeringMode.requestDiagnose(int[], int)`와 `DtcFormatExt`를 확인했습니다. 정수 DTC 목록을 문자열 형식으로 바꾼 뒤 각 DTC를 두 바이트로 구성하여 연속 배열로 전달합니다. Engineering Mode 앱의 `DTCServiceUtil`은 스피커·안테나 등 진단 대상의 DTC 목록으로 이 API를 호출합니다. **확인한 순정 사용법은 DTC 목록 요청이며, 임의 엔진 ECU 주소와 UDS 프레임을 전달하는 구현으로 검증되지 않았습니다.** 난독화 필드 이름 `aEv`는 이 DTC 목록에도 사용되므로, 이름만 보고 Active Exhaust Valve로 해석하지 않습니다.
+
+## HCAN 보완 추출에서 확인한 내용
 
 `HscanMicomService`에는 MICOM 준비 시 `hscand`를 시작하는 코드가 있습니다. 이벤트는 HSCAN/telematics 계열의 MICOM 카테고리를 수신하여 리스너로 전달하며, 송신은 다시 `MicomService.sendPacket()`을 사용합니다. **이 시작 코드를 분석했을 뿐, 이번 연구 도구가 데몬을 시작한 것은 아닙니다.**
 
-보완 추출 결과의 `framework-files.txt`에는 `com.hkmc.ext.hcan.jar` 및 `.odex`가 실제로 열거되어 있지만, 현재 PC의 추출본에는 이 두 파일이 없습니다. 또한 `hscand`·`micomd` 등 네이티브 코드와 Engineering Mode 앱의 진단 요청 생성부도 확보하지 못했습니다.
+v0.3.0 결과에는 `com.hkmc.ext.hcan.jar/.odex`, `HKMC_EngineerMode.odex`, `hscand`, `micomd`, `micomlog`가 모두 포함됐습니다. 추출 상태는 `100% COMPLETE`, 복사 6개, 건너뜀 0개, 오류 로그 0바이트이며 코드 합계는 1,953,353바이트입니다. 대상 펌웨어도 기존 분석과 일치합니다. 이는 추출 성공이며 플랩 제어 시험 성공이 아닙니다.
 
-다음에는 이 코드에서 다음을 확인합니다.
+HCAN 확장의 `TM_HSCANAdapter`는 등록된 `tm_hscan_service`의 `ITM_HSCANService`를 사용하는 클라이언트입니다.
 
-- ECU 대상 주소/전송 채널/길이/타임아웃을 받는 인터페이스가 있는지, 아니면 정해진 차량 데이터 항목만 다루는지.
-- `requestDiagnose()`에 전달되는 데이터의 실제 생성·해석 방식과 지원 항목.
-- 네이티브 데몬이 MICOM 헤더를 어떻게 라우팅하는지, CAN/UDS 중계 또는 허용 목록이 있는지.
-- AEV 강제 열림·닫힘·해제와 실제 피드백을 나타내는 기능이 존재하는지.
+- `requestDiag()`는 진단 타입·콜백·호출 앱 이름을 서비스로 전달합니다. 실제 하위 진단 절차는 프록시에 없습니다.
+- `cancelReqDiag()`는 리스너 등록 해제에 위임합니다. ECU의 액추에이터 제어권 해제 명령이라고 볼 수 없습니다.
+- `setCanSignalValue()`도 서비스 호출입니다. 인접한 `CAN_SIGNAL_TYPE` 상수는 속도·RPM·주행거리·등록 상태 항목이며, AEV 강제 개폐 항목은 확인되지 않았습니다. 이 상수 목록이 모든 하위 기능을 설명한다고 단정하지 않습니다.
+- 수집된 HCAN 확장과 검사한 프레임워크의 메서드·클래스 목록에서는 이 서비스의 실제 처리 구현을 확인하지 못했습니다. 실제 서비스 등록은 수집 목록에서 확인했으나, 등록만으로 구현 파일이나 제어 범위를 알 수는 없습니다.
+
+따라서 다음 경계는 **`tm_hscan_service`의 실제 구현과 MICOM 펌웨어의 처리 규격**입니다. 서비스 이름·프로세스 이름만으로 특정 APK가 소유한다고 추정하지 않습니다.
+
+## 네이티브 전달 경로와 한계
+
+`micomd`의 ARM 코드를 분석하여 클라이언트 메시지 수신·프레임 분리·송신 큐·TTY 기록으로 이어지는 경로를 확인했습니다. 시작 코드의 기본 TTY는 `/dev/ttyTCC2`이며, 장치를 열어 저장한 파일 디스크립터를 송신 큐의 기록 경로가 사용합니다. 이 분석은 바이너리를 PC에서 읽어 수행했으며, 장치를 열거나 데몬을 실행하지 않았습니다.
+
+이는 앞서 확인한 `MicomPacketRunner → micom_mux` 이후의 전달 계층을 설명합니다. **UART에 전달되는 MICOM 메시지가 엔진 ECU의 어떤 요청으로 변환되는지는 이 데몬에서 확인하지 못했습니다.** 일반 MICOM 송신, 차량 CAN 송신, AEV 강제 제어는 각각 별도 증거가 필요합니다.
+
+`hscand`에는 `hscan_mux`, `micom_mux_albumart`, `/dev/tcc-tsif0`와 관련 입출력 코드가 있습니다. 이 이름이나 장치 접근만으로 임의 CAN/UDS 송신 기능을 입증할 수 없습니다. 또한 `micomlog`에는 소켓 송신과 MICOM 로그 설정 요청 코드가 있어 단순 수동 로그 읽기 도구로 취급하지 않으며 실행하지 않았습니다.
 
 ## 공개 구현 대조
 
@@ -62,4 +76,4 @@
 
 이번에는 큰 N 모드 APK를 다시 복사하지 않으며, 파일당 8MiB·복사 코드 합계 24MiB로 제한합니다. Android 4.4 기본 toolbox에 없는 `wc`/`tr`/`stat`에 의존하지 않고 `ls -ln`의 크기 필드를 확인합니다. Android와 GNU의 출력 차이를 모의 테스트로 검증합니다. 기본 도구 목록과 출력 형식은 [AOSP KitKat toolbox](https://github.com/aosp-mirror/platform_system_core/blob/android-4.4.2_r1/toolbox/Android.mk), [ls 구현](https://github.com/aosp-mirror/platform_system_core/blob/android-4.4.2_r1/toolbox/ls.c)을 대조했습니다.
 
-새 파일들을 분석해도 MICOM 펌웨어 내부까지 자동으로 밝혀지는 것은 아닙니다. 하위 라우팅이 펌웨어에만 있으면 그 부분은 여전히 미확인으로 남습니다. 현재 확인된 결론은 **내비의 일반 MICOM 송신 계층 존재까지**이며, 세 가지 AEV 제어를 제공하는 패키지는 아직 구현하지 않았습니다.
+보완 추출로 **내비의 MICOM 송신 계층에서 네이티브 UART 전달까지** 확인 범위를 넓혔습니다. 그러나 HCAN 서비스의 실제 처리부, MICOM 펌웨어의 ECU 중계, 대상 AEV의 강제 열림·닫힘·제어 해제 명령과 피드백은 아직 확인되지 않았습니다. 추가 하드웨어 없는 제어의 가능성은 미확정이며, 세 가지 AEV 제어를 제공하는 패키지는 아직 구현하지 않았습니다.
