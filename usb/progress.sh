@@ -6,7 +6,7 @@ SKIPPED=0
 UI_LOG=/dev/null
 PROGRESS_STATE=RUNNING
 STEP=준비
-DETAIL=차량과 USB를 확인합니다
+DETAIL="차량과 USB를 확인합니다"
 OUT=
 
 # Apply a timeout to each child, including ActivityManager, and reap it.

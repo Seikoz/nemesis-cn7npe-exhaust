@@ -98,6 +98,9 @@ class CollectorTests(unittest.TestCase):
         # real seconds and never reads a test environment override.
         progress = (ROOT / "usb/progress.sh").read_text(encoding="utf-8")
         progress = progress.replace("sleep 1", "sleep 0.01").replace("sleep 2", "sleep 0.01")
+        # Allow normal Windows process startup after shrinking the polling
+        # interval; the copy-timeout case still uses the accelerated deadline.
+        progress = progress.replace("run_bounded 5 am", "run_bounded 100 am")
         (self.usb / "progress.sh").write_text(progress, encoding="utf-8", newline="\n")
 
     def stub(self, name, content):
@@ -149,6 +152,7 @@ echo Starting: Intent
         before = {p: p.read_bytes() for p in self.system.rglob("*") if p.is_file()}
         run = self.run_collector()
         self.assertEqual(run.returncode, 0, run.stderr[-1800:] + run.stdout)
+        self.assertNotIn("command not found", run.stderr)
         report_dir = self.usb / "CN7NPE-exhaust-private-1"
         report = (report_dir / "report.txt").read_text()
         self.assertIn("collection=COMPLETE", (report_dir / "result.txt").read_text())
