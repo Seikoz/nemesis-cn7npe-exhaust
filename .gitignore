@@ -1,5 +1,6 @@
 __pycache__/
 dist/
+private/
 CN7NPE-exhaust-private*/
 *.apk
 *.odex

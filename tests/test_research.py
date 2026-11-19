@@ -43,6 +43,14 @@ class ArchiveTests(unittest.TestCase):
                 self.assertIn(b"NOT an exhaust flap controller", archive.read("CN7NPE-EXHAUST-RESEARCH.txt"))
             self.assertIn(ASSET, (a.parent / "SHA256SUMS.txt").read_text())
 
+    def test_service_archive_selects_incremental_collector(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path, _ = build(tmp, services=True)
+            with zipfile.ZipFile(path) as archive:
+                self.assertIn(b"path=collect-services.sh", archive.read("NEMESIS.data"))
+                self.assertIn("collect-services.sh", archive.namelist())
+                self.assertIn(b"--services-only", archive.read("collect-services.sh"))
+
 
 @unittest.skipUnless(SHELL, "POSIX sh required; set TEST_SH")
 class CollectorTests(unittest.TestCase):
@@ -69,6 +77,7 @@ class CollectorTests(unittest.TestCase):
         self.ui_fails = False
         self.ui_text_error = False
         self.sync_fails = False
+        self.services_only = False
         self.path_override = None
         shell_base = subprocess.run([SHELL, "-c", "pwd -P"], cwd=self.base,
                                     capture_output=True, text=True, check=True, timeout=10).stdout.strip()
@@ -130,7 +139,10 @@ echo Starting: Intent
             "TEST_SYNC_FAIL": str(int(self.sync_fails)),
             "TEST_TRACE": posix(self.base / "trace.txt"),
         })
-        return subprocess.run([SHELL, self.script.as_posix()], cwd=self.usb, env=env,
+        args = [SHELL, self.script.as_posix()]
+        if self.services_only:
+            args.append("--services-only")
+        return subprocess.run(args, cwd=self.usb, env=env,
                               capture_output=True, text=True, encoding="utf-8", timeout=60)
 
     def test_complete_copy_and_only_expected_stock_files(self):
@@ -139,7 +151,7 @@ echo Starting: Intent
         self.assertEqual(run.returncode, 0, run.stderr[-1800:] + run.stdout)
         report_dir = self.usb / "CN7NPE-exhaust-private-1"
         report = (report_dir / "report.txt").read_text()
-        self.assertIn("collection=COMPLETE", report)
+        self.assertIn("collection=COMPLETE", (report_dir / "result.txt").read_text())
         self.assertIn("flap_control=NOT_IMPLEMENTED", report)
         self.assertEqual(set(p.name for p in (report_dir / "stock").iterdir()),
                          {"automotive.jar", "automotive.odex", "nmode-0.apk", "nmode-0.odex"})
@@ -235,7 +247,24 @@ echo Starting: Intent
         self.assertIn("state=FAILED", (self.usb / "CN7NPE-exhaust-private-1/progress.txt").read_text(encoding="utf-8"))
         report = (self.usb / "CN7NPE-exhaust-private-1/report.txt").read_text(encoding="utf-8")
         self.assertNotIn("collection=COMPLETE", report)
-        self.assertIn("collection=FAILED_SYNC", report)
+        self.assertIn("collection=FAILED_SYNC", (self.usb / "CN7NPE-exhaust-private-1/result.txt").read_text())
+
+    def test_service_only_does_not_query_or_copy_nmode(self):
+        self.services_only = True
+        self.pm_fails = True
+        (self.system / "framework/automotive-service.odex").write_bytes(b"FAKE-SERVICE")
+        run = self.run_collector()
+        self.assertEqual(run.returncode, 0, run.stderr[-1800:] + run.stdout)
+        out = self.usb / "CN7NPE-exhaust-private-1"
+        self.assertEqual(set(p.name for p in (out / "stock").iterdir()), {"automotive-service.odex"})
+        self.assertIn("profile=services", (out / "report.txt").read_text())
+        self.assertIn("collection=COMPLETE", (out / "result.txt").read_text())
+
+    def test_service_only_requires_service_implementation(self):
+        self.services_only = True
+        (self.system / "framework/automotive-service.jar").write_bytes(b"STUB-JAR")
+        self.assertEqual(self.run_collector().returncode, 4)
+        self.assertNotIn("· 100%", (self.base / "trace.txt").read_text(encoding="utf-8"))
 
     def test_package_path_failure_never_displays_100_percent(self):
         self.path_fails = True

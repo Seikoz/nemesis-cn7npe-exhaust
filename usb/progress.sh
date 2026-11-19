@@ -39,7 +39,7 @@ run_bounded() {
 progress_snapshot() {
     [ -n "$OUT" ] || return 0
     {
-        echo "version=0.2.0"
+        echo "version=0.2.1"
         echo "state=$PROGRESS_STATE"
         echo "percent=$PERCENT"
         echo "percent_basis=completed_work_steps_not_bytes_or_time"
@@ -71,7 +71,7 @@ progress_text() {
         if [ "$CELL" -lt "$FILLED" ]; then BAR="${BAR}#"; else BAR="${BAR}-"; fi
         CELL=$((CELL + 1))
     done
-    MESSAGE="분석 파일 추출 v0.2.0 · ${PERCENT}%
+    MESSAGE="분석 파일 추출 v0.2.1 · ${PERCENT}%
 [$BAR] 작업 단계 기준
 $STEP
 $DETAIL
@@ -126,7 +126,7 @@ progress_finish() {
     fi
     # No more writes to USB after the successful final sync.
     UI_LOG=/dev/null
-    progress_ui progress "분석 파일 추출 v0.2.0 · 100%
+    progress_ui progress "분석 파일 추출 v0.2.1 · 100%
 [##########] 작업 단계 완료
 필수 파일 확인과 USB 저장 마무리 완료
 복사 $COPIED / 없음 $SKIPPED
@@ -136,12 +136,7 @@ progress_finish() {
 }
 
 progress_report_status() {
-    FINAL_STATUS=$1
-    {
-        while IFS= read -r REPORT_LINE; do
-            case "$REPORT_LINE" in collection=*) ;; *) echo "$REPORT_LINE" ;; esac
-        done < "$OUT/report.txt"
-        echo "collection=$FINAL_STATUS"
-    } > "$OUT/report-update.tmp" || return 1
-    mv -f "$OUT/report-update.tmp" "$OUT/report.txt"
+    # Keep the detailed report intact. A separate tiny terminal result avoids
+    # rereading and replacing a report that was still READY_TO_SYNC on a car.
+    echo "collection=$1" > "$OUT/result.txt"
 }

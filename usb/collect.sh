@@ -16,6 +16,16 @@ esac
 [ -f "$USB_DIR/CN7NPE-EXHAUST-RESEARCH.txt" ] || exit 1
 [ -f "$USB_DIR/progress.sh" ] || exit 1
 . "$USB_DIR/progress.sh"
+PROFILE=full
+STEMS="automotive framework framework2 services core ext android.policy"
+PRIMARY_STEM=automotive
+SLOT_COUNT=14
+if [ "${1-}" = --services-only ]; then
+    PROFILE=services
+    STEMS=automotive-service
+    PRIMARY_STEM=automotive-service
+    SLOT_COUNT=2
+fi
 show_or_abort 0 "1/5 대상 확인" "차량 소프트웨어와 USB를 확인합니다."
 trap 'if [ -n "$CHILD_PID" ]; then kill -TERM "$CHILD_PID" 2>/dev/null; sleep 1; kill -KILL "$CHILD_PID" 2>/dev/null; wait "$CHILD_PID" 2>/dev/null; fi; progress_failure "실행 중단 신호를 받았습니다."; exit 130' INT TERM HUP
 
@@ -43,14 +53,17 @@ done
 [ -n "$OUT" ] || { progress_failure "USB 결과 폴더를 만들 수 없습니다."; exit 3; }
 mkdir "$OUT/stock" || { progress_failure "USB 저장 공간을 확인해 주세요."; exit 3; }
 UI_LOG="$OUT/ui.log"
+exec 2> "$OUT/collector-errors.log"
 show_or_abort 5 "1/5 대상 확인" "대상 확인 완료 · USB에 새 결과 폴더 생성"
 
 REPORT="$OUT/report.txt"
 ERRORS=0
 FRAMEWORK=0
+SERVICE_CODE=0
 NMODE=0
 {
-    echo "CN7NPE exhaust research collector 0.2.0"
+    echo "CN7NPE exhaust research collector 0.2.1"
+    echo "profile=$PROFILE"
     echo "flap_control=NOT_IMPLEMENTED"
     echo "product=$PRODUCT"
     echo "platform=tcc803x"
@@ -78,13 +91,14 @@ copy_stock() {
 # Paired JAR/ODEX and boot dependencies for off-car analysis. No /data, modem,
 # logcat, contact database, VIN, settings database or full getprop collection.
 CHECKED=0
-show_or_abort 10 "2/5 프레임워크 수집" "14개 후보 파일을 차례대로 확인합니다."
-for STEM in automotive framework framework2 services core ext android.policy; do
+show_or_abort 10 "2/5 프레임워크 수집" "$SLOT_COUNT개 후보 파일을 차례대로 확인합니다."
+for STEM in $STEMS; do
     for EXT in jar odex; do
         SOURCE="/system/framework/$STEM.$EXT"
-        show_or_abort $((10 + CHECKED * 60 / 14)) "2/5 프레임워크 수집" "현재: $STEM.$EXT · 복사 제한 60초"
+        show_or_abort $((10 + CHECKED * 60 / SLOT_COUNT)) "2/5 프레임워크 수집" "현재: $STEM.$EXT · 복사 제한 60초"
         if copy_stock "$SOURCE" "$STEM.$EXT"; then
-            [ "$STEM" = automotive ] && FRAMEWORK=$((FRAMEWORK + 1))
+            [ "$STEM" = "$PRIMARY_STEM" ] && FRAMEWORK=$((FRAMEWORK + 1))
+            if [ "$STEM" = automotive-service ] && [ "$EXT" = odex ]; then SERVICE_CODE=1; fi
         else
             SKIPPED=$((SKIPPED + 1))
             echo "missing=$SOURCE" >> "$REPORT"
@@ -92,9 +106,15 @@ for STEM in automotive framework framework2 services core ext android.policy; do
         CHECKED=$((CHECKED + 1))
     done
 done
+if [ "$PROFILE" = services ]; then
+    for FRAMEWORK_PATH in /system/framework/*.jar /system/framework/*.odex; do
+        [ -f "$FRAMEWORK_PATH" ] && echo "${FRAMEWORK_PATH##*/}" >> "$OUT/framework-files.txt"
+    done
+fi
 
 # Enumerate only system packages; keep only N-mode package identifiers.
 # Paths from PackageManager are data, never evaluated as shell code.
+if [ "$PROFILE" = full ]; then
 show_or_abort 70 "3/5 N 모드 앱 확인" "시스템 앱 목록을 확인합니다 · 제한 30초"
 if run_bounded 30 pm list packages -s > "$OUT/system-packages.tmp" 2>/dev/null; then
     while IFS= read -r LINE; do
@@ -143,15 +163,25 @@ if [ -f "$OUT/nmode-packages.txt" ]; then
         done < "$OUT/package-paths.tmp"
     done < "$OUT/nmode-packages.txt"
 fi
+fi
 
 # rm only our two temporary, newly created files; no recursive deletion.
 show_or_abort 95 "5/5 결과 확인" "필수 파일과 복사 결과를 확인합니다."
 rm -f "$OUT/system-packages.tmp" "$OUT/package-paths.tmp"
+REQUIRED_OK=0
+if [ "$FRAMEWORK" -gt 0 ] && [ "$ERRORS" -eq 0 ]; then
+    if [ "$PROFILE" = services ]; then
+        [ "$SERVICE_CODE" -eq 1 ] && REQUIRED_OK=1
+    elif [ "$NMODE" -gt 0 ]; then
+        REQUIRED_OK=1
+    fi
+fi
 {
     echo "automotive_files=$FRAMEWORK"
+    echo "primary_component=$PRIMARY_STEM"
     echo "nmode_apks=$NMODE"
     echo "copy_or_package_errors=$ERRORS"
-    if [ "$FRAMEWORK" -gt 0 ] && [ "$NMODE" -gt 0 ] && [ "$ERRORS" -eq 0 ]; then
+    if [ "$REQUIRED_OK" -eq 1 ]; then
         echo "collection=READY_TO_SYNC"
     else
         echo "collection=INCOMPLETE"
@@ -163,12 +193,12 @@ cat > "$OUT/PRIVATE-README.txt" <<'PRIVATE'
 이 폴더를 PC에서 ZIP으로 압축해 개발 대화에 비공개로 첨부해 주세요.
 stock/에는 제조사 APK/JAR/ODEX가 들어 있습니다.
 공개 GitHub 저장소, 릴리스, 이슈에 올리지 마세요.
-report.txt의 collection=COMPLETE는 추출 완료일 뿐 제어 성공이 아닙니다.
+result.txt의 collection=COMPLETE는 추출 완료일 뿐 제어 성공이 아닙니다.
 시스템 파일을 수정하거나 배기 플랩 명령을 보내지 않았습니다.
 PRIVATE
 [ "$?" -eq 0 ] || exit 3
 echo "Saved: $OUT"
-if [ "$FRAMEWORK" -eq 0 ] || [ "$NMODE" -eq 0 ] || [ "$ERRORS" -ne 0 ]; then
+if [ "$REQUIRED_OK" -ne 1 ]; then
     echo "Some required inputs are missing. Keep the partial export for analysis."
     progress_failure "필수 파일이 누락되었습니다. 결과 폴더를 보관해 주세요."
     exit 4
