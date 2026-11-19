@@ -11,6 +11,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: sh -n usb/collect.sh
+      - run: sh -n usb/progress.sh
       - run: python -m unittest discover -s tests -v
       - run: python build.py
       - uses: actions/upload-artifact@v4

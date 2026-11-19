@@ -1,4 +1,4 @@
-CN7NPE exhaust research collector 0.1.0
+CN7NPE exhaust research collector 0.2.0
 This is NOT an exhaust flap controller.
 It copies selected stock software to this USB drive for private analysis.
 Do not upload the collected files to a public repository or issue.

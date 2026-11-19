@@ -65,6 +65,10 @@ class CollectorTests(unittest.TestCase):
         self.product = PRODUCT
         self.platform = "tcc803x"
         self.pm_fails = False
+        self.path_fails = False
+        self.ui_fails = False
+        self.ui_text_error = False
+        self.sync_fails = False
         self.path_override = None
         shell_base = subprocess.run([SHELL, "-c", "pwd -P"], cwd=self.base,
                                     capture_output=True, text=True, check=True, timeout=10).stdout.strip()
@@ -81,6 +85,11 @@ class CollectorTests(unittest.TestCase):
         )
         self.script = self.usb / "collect.sh"
         self.script.write_text(transformed, encoding="utf-8", newline="\n")
+        # Shorten polling only in this disposable test copy. Production uses
+        # real seconds and never reads a test environment override.
+        progress = (ROOT / "usb/progress.sh").read_text(encoding="utf-8")
+        progress = progress.replace("sleep 1", "sleep 0.01").replace("sleep 2", "sleep 0.01")
+        (self.usb / "progress.sh").write_text(progress, encoding="utf-8", newline="\n")
 
     def stub(self, name, content):
         target = self.bin / name
@@ -99,20 +108,30 @@ esac
         self.stub("pm", '''[ "$TEST_PM_FAIL" = 1 ] && exit 1
 case "$1" in
 list) echo package:com.hkmc.app.nmode.ui; echo package:com.hkmc.app.phone; echo package:com.example.nmode ;;
-path) echo "package:$TEST_APP" ;;
+path) [ "$TEST_PATH_FAIL" = 1 ] && exit 1; echo "package:$TEST_APP" ;;
 *) exit 99 ;;
 esac
 ''')
         # Never flush host volumes during tests.
-        self.stub("sync", "exit 0\n")
+        self.stub("sync", 'echo sync >> "$TEST_TRACE"; [ "$TEST_SYNC_FAIL" != 1 ]\n')
+        self.stub("am", '''[ "$TEST_UI_FAIL" = 1 ] && exit 1
+if [ "$TEST_UI_TEXT_ERROR" = 1 ]; then echo 'Error: Activity class does not exist'; exit 0; fi
+echo "$*" >> "$TEST_TRACE"
+echo Starting: Intent
+''')
         env = dict(os.environ)
         env.update({
             "TEST_BIN": posix(self.bin), "TEST_PRODUCT": self.product,
             "TEST_PLATFORM": self.platform, "TEST_PM_FAIL": str(int(self.pm_fails)),
             "TEST_APP": self.path_override or posix(self.system / "app/NMode.apk"),
+            "TEST_PATH_FAIL": str(int(self.path_fails)),
+            "TEST_UI_FAIL": str(int(self.ui_fails)),
+            "TEST_UI_TEXT_ERROR": str(int(self.ui_text_error)),
+            "TEST_SYNC_FAIL": str(int(self.sync_fails)),
+            "TEST_TRACE": posix(self.base / "trace.txt"),
         })
         return subprocess.run([SHELL, self.script.as_posix()], cwd=self.usb, env=env,
-                              capture_output=True, text=True, timeout=30)
+                              capture_output=True, text=True, encoding="utf-8", timeout=60)
 
     def test_complete_copy_and_only_expected_stock_files(self):
         before = {p: p.read_bytes() for p in self.system.rglob("*") if p.is_file()}
@@ -127,6 +146,13 @@ esac
         self.assertEqual((report_dir / "nmode-packages.txt").read_text().strip(), "com.hkmc.app.nmode.ui")
         self.assertFalse(list(report_dir.glob("*.tmp")))
         self.assertEqual(before, {p: p.read_bytes() for p in self.system.rglob("*") if p.is_file()})
+        events = (report_dir / "events.log").read_text(encoding="utf-8").splitlines()
+        percentages = [int(line.split()[0].split("=")[1]) for line in events]
+        self.assertEqual(percentages, sorted(percentages))
+        self.assertEqual(percentages[-1], 100)
+        trace = (self.base / "trace.txt").read_text(encoding="utf-8")
+        self.assertLess(trace.rindex("sync\n"), trace.index("· 100%"))
+        self.assertIn("state=COMPLETE", (report_dir / "progress.txt").read_text(encoding="utf-8"))
 
     def test_alternative_product_string_is_accepted(self):
         self.product = "CN7NPE.KOR.S5W_M.V039.001.260902"
@@ -159,7 +185,7 @@ esac
     def test_missing_nmode_keeps_incomplete_export(self):
         (self.system / "app/NMode.apk").unlink()
         self.assertEqual(self.run_collector().returncode, 4)
-        report = (self.usb / "CN7NPE-exhaust-private-1/report.txt").read_text()
+        report = (self.usb / "CN7NPE-exhaust-private-1/report.txt").read_text(encoding="utf-8")
         self.assertIn("collection=INCOMPLETE", report)
         self.assertIn("nmode_apks=0", report)
 
@@ -188,7 +214,41 @@ esac
         self.assertEqual(self.run_collector().returncode, 4)
         report = (self.usb / "CN7NPE-exhaust-private-1/report.txt").read_text()
         self.assertIn("copy_failed=", report)
-        self.assertIn("collection=INCOMPLETE", report)
+        self.assertIn("collection=FAILED_COPY", report)
+        self.assertNotIn("· 100%", (self.base / "trace.txt").read_text(encoding="utf-8"))
+
+    def test_ui_launch_failure_stops_before_copy(self):
+        self.ui_fails = True
+        self.assertEqual(self.run_collector().returncode, 5)
+        self.assertFalse(list(self.usb.rglob("*.jar")))
+
+    def test_activity_manager_text_error_stops_before_copy(self):
+        self.ui_text_error = True
+        self.assertEqual(self.run_collector().returncode, 5)
+        self.assertFalse(list(self.usb.rglob("*.jar")))
+
+    def test_sync_failure_never_displays_100_percent(self):
+        self.sync_fails = True
+        self.assertEqual(self.run_collector().returncode, 4)
+        trace = (self.base / "trace.txt").read_text(encoding="utf-8")
+        self.assertNotIn("· 100%", trace)
+        self.assertIn("state=FAILED", (self.usb / "CN7NPE-exhaust-private-1/progress.txt").read_text(encoding="utf-8"))
+        report = (self.usb / "CN7NPE-exhaust-private-1/report.txt").read_text(encoding="utf-8")
+        self.assertNotIn("collection=COMPLETE", report)
+        self.assertIn("collection=FAILED_SYNC", report)
+
+    def test_package_path_failure_never_displays_100_percent(self):
+        self.path_fails = True
+        self.assertEqual(self.run_collector().returncode, 4)
+        trace = (self.base / "trace.txt").read_text(encoding="utf-8")
+        self.assertNotIn("· 100%", trace)
+
+    def test_copy_timeout_keeps_partial_files_and_returns_failure(self):
+        self.stub("cp", 'exec sleep 5\n')
+        self.assertEqual(self.run_collector().returncode, 4)
+        trace = (self.base / "trace.txt").read_text(encoding="utf-8")
+        self.assertNotIn("· 100%", trace)
+        self.assertIn("collection=FAILED_COPY", (self.usb / "CN7NPE-exhaust-private-1/report.txt").read_text(encoding="utf-8"))
 
     def test_production_script_rejects_internal_directory(self):
         original = self.base / "collect.sh"

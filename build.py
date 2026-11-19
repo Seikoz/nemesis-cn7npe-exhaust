@@ -4,11 +4,12 @@ import hashlib
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 ASSET = f"NEMESIS-CN7NPE-Exhaust-Research-v{VERSION}-USB.zip"
 FILES = {
     "NEMESIS.data": ROOT / "usb/NEMESIS.data",
     "collect.sh": ROOT / "usb/collect.sh",
+    "progress.sh": ROOT / "usb/progress.sh",
     "CN7NPE-EXHAUST-RESEARCH.txt": ROOT / "usb/CN7NPE-EXHAUST-RESEARCH.txt",
     "INSTALL-KO.md": ROOT / "usb/INSTALL-KO.md",
     "LICENSE": ROOT / "LICENSE",

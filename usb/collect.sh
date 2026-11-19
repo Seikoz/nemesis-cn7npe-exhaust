@@ -14,14 +14,18 @@ case "$USB_DIR" in
     *) echo "Run from a NEMESIS USB drive, not internal storage."; exit 1 ;;
 esac
 [ -f "$USB_DIR/CN7NPE-EXHAUST-RESEARCH.txt" ] || exit 1
+[ -f "$USB_DIR/progress.sh" ] || exit 1
+. "$USB_DIR/progress.sh"
+show_or_abort 0 "1/5 대상 확인" "차량 소프트웨어와 USB를 확인합니다."
+trap 'if [ -n "$CHILD_PID" ]; then kill -TERM "$CHILD_PID" 2>/dev/null; sleep 1; kill -KILL "$CHILD_PID" 2>/dev/null; wait "$CHILD_PID" 2>/dev/null; fi; progress_failure "실행 중단 신호를 받았습니다."; exit 130' INT TERM HUP
 
 PRODUCT=$(getprop ro.build.product) || exit 1
 case "$PRODUCT" in
     CN7NPE.KOR.0000.V039.001.260902|CN7NPE.KOR.S5W_M.V039.001.260902) ;;
-    *) echo "Requires CN7NPE KOR V039.001.260902. Nothing collected."; exit 2 ;;
+    *) progress_failure "CN7NPE 한국형 V039.001.260902만 지원합니다."; exit 2 ;;
 esac
 [ "$(getprop ro.board.platform)" = tcc803x ] || {
-    echo "Requires the TCC803x head unit. Nothing collected."
+    progress_failure "TCC803x 헤드유닛만 지원합니다."
     exit 2
 }
 
@@ -36,15 +40,17 @@ while [ "$INDEX" -le 20 ]; do
     fi
     INDEX=$((INDEX + 1))
 done
-[ -n "$OUT" ] || { echo "Cannot create output directory on USB."; exit 3; }
-mkdir "$OUT/stock" || exit 3
+[ -n "$OUT" ] || { progress_failure "USB 결과 폴더를 만들 수 없습니다."; exit 3; }
+mkdir "$OUT/stock" || { progress_failure "USB 저장 공간을 확인해 주세요."; exit 3; }
+UI_LOG="$OUT/ui.log"
+show_or_abort 5 "1/5 대상 확인" "대상 확인 완료 · USB에 새 결과 폴더 생성"
 
 REPORT="$OUT/report.txt"
 ERRORS=0
 FRAMEWORK=0
 NMODE=0
 {
-    echo "CN7NPE exhaust research collector 0.1.0"
+    echo "CN7NPE exhaust research collector 0.2.0"
     echo "flap_control=NOT_IMPLEMENTED"
     echo "product=$PRODUCT"
     echo "platform=tcc803x"
@@ -57,29 +63,40 @@ copy_stock() {
     SOURCE=$1
     DEST=$2
     [ -f "$SOURCE" ] && [ -r "$SOURCE" ] || return 1
-    if cp "$SOURCE" "$OUT/stock/$DEST"; then
+    if run_bounded 60 cp "$SOURCE" "$OUT/stock/$DEST"; then
         echo "copied=$SOURCE -> stock/$DEST" >> "$REPORT" || exit 3
+        COPIED=$((COPIED + 1))
         return 0
     fi
     echo "copy_failed=$SOURCE" >> "$REPORT" || exit 3
     ERRORS=$((ERRORS + 1))
-    return 1
+    echo "collection=FAILED_COPY" >> "$REPORT"
+    progress_failure "파일 복사 실패 또는 60초 시간 초과: $DEST"
+    exit 4
 }
 
 # Paired JAR/ODEX and boot dependencies for off-car analysis. No /data, modem,
 # logcat, contact database, VIN, settings database or full getprop collection.
+CHECKED=0
+show_or_abort 10 "2/5 프레임워크 수집" "14개 후보 파일을 차례대로 확인합니다."
 for STEM in automotive framework framework2 services core ext android.policy; do
     for EXT in jar odex; do
         SOURCE="/system/framework/$STEM.$EXT"
+        show_or_abort $((10 + CHECKED * 60 / 14)) "2/5 프레임워크 수집" "현재: $STEM.$EXT · 복사 제한 60초"
         if copy_stock "$SOURCE" "$STEM.$EXT"; then
             [ "$STEM" = automotive ] && FRAMEWORK=$((FRAMEWORK + 1))
+        else
+            SKIPPED=$((SKIPPED + 1))
+            echo "missing=$SOURCE" >> "$REPORT"
         fi
+        CHECKED=$((CHECKED + 1))
     done
 done
 
 # Enumerate only system packages; keep only N-mode package identifiers.
 # Paths from PackageManager are data, never evaluated as shell code.
-if pm list packages -s > "$OUT/system-packages.tmp" 2>/dev/null; then
+show_or_abort 70 "3/5 N 모드 앱 확인" "시스템 앱 목록을 확인합니다 · 제한 30초"
+if run_bounded 30 pm list packages -s > "$OUT/system-packages.tmp" 2>/dev/null; then
     while IFS= read -r LINE; do
         PKG=${LINE#package:}
         case "$PKG" in
@@ -92,15 +109,21 @@ if pm list packages -s > "$OUT/system-packages.tmp" 2>/dev/null; then
 else
     echo "package_list_failed=yes" >> "$REPORT"
     ERRORS=$((ERRORS + 1))
+    echo "collection=FAILED_PACKAGE_LIST" >> "$REPORT"
+    progress_failure "앱 목록 확인 실패 또는 30초 시간 초과"
+    exit 4
 fi
 
 if [ -f "$OUT/nmode-packages.txt" ]; then
     APP_INDEX=0
     while IFS= read -r PKG; do
         echo "nmode_package=$PKG" >> "$REPORT"
-        if ! pm path "$PKG" > "$OUT/package-paths.tmp" 2>/dev/null; then
+        show_or_abort 80 "3/5 N 모드 앱 확인" "앱 경로 확인 · 제한 30초"
+        if ! run_bounded 30 pm path "$PKG" > "$OUT/package-paths.tmp" 2>/dev/null; then
             ERRORS=$((ERRORS + 1))
-            continue
+            echo "collection=FAILED_PACKAGE_PATH" >> "$REPORT"
+            progress_failure "N 모드 앱 경로 확인 실패 또는 30초 시간 초과"
+            exit 4
         fi
         while IFS= read -r LINE; do
             case "$LINE" in package:/system/*.apk) ;;
@@ -108,9 +131,13 @@ if [ -f "$OUT/nmode-packages.txt" ]; then
             esac
             SOURCE=${LINE#package:}
             case "$SOURCE" in */../*|*/./*) continue ;; esac
+            show_or_abort 85 "4/5 N 모드 앱 수집" "현재: nmode-$APP_INDEX.apk · 복사 제한 60초"
             if copy_stock "$SOURCE" "nmode-$APP_INDEX.apk"; then
                 NMODE=$((NMODE + 1))
-                copy_stock "${SOURCE%.apk}.odex" "nmode-$APP_INDEX.odex"
+                show_or_abort 90 "4/5 N 모드 앱 수집" "현재: nmode-$APP_INDEX.odex · 복사 제한 60초"
+                copy_stock "${SOURCE%.apk}.odex" "nmode-$APP_INDEX.odex" || SKIPPED=$((SKIPPED + 1))
+            else
+                SKIPPED=$((SKIPPED + 1))
             fi
             APP_INDEX=$((APP_INDEX + 1))
         done < "$OUT/package-paths.tmp"
@@ -118,13 +145,14 @@ if [ -f "$OUT/nmode-packages.txt" ]; then
 fi
 
 # rm only our two temporary, newly created files; no recursive deletion.
+show_or_abort 95 "5/5 결과 확인" "필수 파일과 복사 결과를 확인합니다."
 rm -f "$OUT/system-packages.tmp" "$OUT/package-paths.tmp"
 {
     echo "automotive_files=$FRAMEWORK"
     echo "nmode_apks=$NMODE"
     echo "copy_or_package_errors=$ERRORS"
     if [ "$FRAMEWORK" -gt 0 ] && [ "$NMODE" -gt 0 ] && [ "$ERRORS" -eq 0 ]; then
-        echo "collection=COMPLETE"
+        echo "collection=READY_TO_SYNC"
     else
         echo "collection=INCOMPLETE"
     fi
@@ -139,11 +167,13 @@ report.txt의 collection=COMPLETE는 추출 완료일 뿐 제어 성공이 아�
 시스템 파일을 수정하거나 배기 플랩 명령을 보내지 않았습니다.
 PRIVATE
 [ "$?" -eq 0 ] || exit 3
-sync
 echo "Saved: $OUT"
 if [ "$FRAMEWORK" -eq 0 ] || [ "$NMODE" -eq 0 ] || [ "$ERRORS" -ne 0 ]; then
     echo "Some required inputs are missing. Keep the partial export for analysis."
+    progress_failure "필수 파일이 누락되었습니다. 결과 폴더를 보관해 주세요."
     exit 4
 fi
+show_or_abort 99 "5/5 USB 저장 마무리" "저장 장치 쓰기 완료를 확인합니다 · 제한 60초"
+progress_finish || exit 4
 echo "Collection complete. Exhaust flap control is not implemented."
 exit 0
