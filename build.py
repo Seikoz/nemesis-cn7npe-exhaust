@@ -6,6 +6,8 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 VERSION = "0.2.1"
 ASSET = f"NEMESIS-CN7NPE-Exhaust-Research-v{VERSION}-USB.zip"
+TRANSPORT_VERSION = "0.3.0"
+TRANSPORT_ASSET = f"NEMESIS-CN7NPE-Exhaust-Transport-Research-v{TRANSPORT_VERSION}-USB.zip"
 FILES = {
     "NEMESIS.data": ROOT / "usb/NEMESIS.data",
     "collect.sh": ROOT / "usb/collect.sh",
@@ -16,13 +18,26 @@ FILES = {
 }
 
 
-def build(destination=None, services=False):
+def build(destination=None, services=False, transport=False):
+    if services and transport:
+        raise ValueError("Choose one collection profile")
     destination = Path(destination) if destination else ROOT / "dist"
     destination.mkdir(parents=True, exist_ok=True)
     asset_name = ASSET.replace("Exhaust-Research", "Exhaust-Service-Research") if services else ASSET
     archive = destination / asset_name
     files = dict(FILES)
-    if services:
+    if transport:
+        asset_name = TRANSPORT_ASSET
+        archive = destination / asset_name
+        files = {
+            "NEMESIS.data": ROOT / "usb/NEMESIS-transport.data",
+            "collect-transport.sh": ROOT / "usb/collect-transport.sh",
+            "progress.sh": ROOT / "usb/progress.sh",
+            "CN7NPE-EXHAUST-RESEARCH.txt": ROOT / "usb/CN7NPE-EXHAUST-RESEARCH.txt",
+            "INSTALL-KO.md": ROOT / "usb/INSTALL-TRANSPORT-KO.md",
+            "LICENSE": ROOT / "LICENSE",
+        }
+    elif services:
         files["NEMESIS.data"] = ROOT / "usb/NEMESIS-services.data"
         files["collect-services.sh"] = ROOT / "usb/collect-services.sh"
         files["INSTALL-KO.md"] = ROOT / "usb/INSTALL-SERVICES-KO.md"
@@ -42,8 +57,10 @@ def build(destination=None, services=False):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--services", action="store_true")
+    profiles = parser.add_mutually_exclusive_group()
+    profiles.add_argument("--services", action="store_true")
+    profiles.add_argument("--transport", action="store_true")
     args = parser.parse_args()
-    archive, digest = build(services=args.services)
+    archive, digest = build(services=args.services, transport=args.transport)
     print(archive)
     print(digest)

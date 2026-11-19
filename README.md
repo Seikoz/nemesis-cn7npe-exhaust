@@ -1,15 +1,17 @@
 # CN7NPE 배기 플랩 제어 연구
 
-**현재 v0.2.1은 차량 서비스 구현 파일을 보완 추출하는 분석 도구입니다. 플랩 열림·닫힘·순정 자동 제어는 구현되지 않았습니다.**
+**현재 v0.3.0은 MICOM·HCAN 통신 경로를 보완 추출하는 분석 도구입니다. 플랩 열림·닫힘·순정 자동 제어는 구현되지 않았습니다.**
 제어 명령과 실차 동작이 확인되지 않아 제어 기능을 제공하는 릴리스는 아직 만들 수 없습니다.
 
 목표는 한국형 아반떼 N 페이스리프트의 배기 플랩을 **열림 / 닫힘 / 순정 자동 복귀**로 제어하는 NEMESIS 패키지입니다. 순정 N Custom의 배기음 단계 변경을 플랩 강제 개폐라고 표시하지 않습니다.
 
 ## 현재 다운로드
 
-[차량 서비스 보완 추출 USB ZIP v0.2.1](https://github.com/Seikoz/nemesis-cn7npe-exhaust/releases/tag/v0.2.1-research)
+[MICOM·HCAN 보완 추출 USB ZIP v0.3.0](https://github.com/Seikoz/nemesis-cn7npe-exhaust/releases/tag/v0.3.0-research)
 
-기존에 N 모드 앱·기본 프레임워크를 추출한 분은 **보완 추출 ZIP**을 사용하세요. 이 ZIP은 `automotive-service.jar`/`.odex`와 파일 이름 목록만 추가로 수집하며, 50MB N 모드 앱을 다시 복사하지 않습니다. [보완 추출 사용법](usb/INSTALL-SERVICES-KO.md)
+기존 `automotive-service`까지 추출한 분은 **v0.3.0 통신 경로 보완 ZIP**을 사용하세요. HCAN 확장·Engineering Mode ODEX·관련 네이티브 파일을 확인하며 파일당 8MiB, 복사 코드 합계 24MiB로 제한합니다. 큰 N 모드 APK는 다시 복사하지 않습니다. [사용법](usb/INSTALL-TRANSPORT-KO.md) · [추가 하드웨어 없는 경로 분석](docs/MICOM-SOFTWARE-PATH-KO.md)
+
+`automotive-service`가 아직 없다면 [이전 차량 서비스 보완 추출 v0.2.1](https://github.com/Seikoz/nemesis-cn7npe-exhaust/releases/tag/v0.2.1-research)을 먼저 사용합니다. [v0.2.1 사용법](usb/INSTALL-SERVICES-KO.md)
 
 추출 자료가 이 PC의 `private/`에 있으면 첨부 용량 제한과 관계없이 로컬 분석이 가능합니다. 제조사 파일과 분석 파생물은 Git에서 제외합니다. 최초 전체 수집 절차는 아래의 v0.2.0 설명을 참고하되, 0.2.0의 마지막 단계에서 실패한 경우 결과 폴더를 보관하세요.
 
@@ -19,7 +21,7 @@
 | 대상 하드웨어 | TCC803x, NEMESIS 1.16.7 이상이 이미 정상 실행되는 Gen5W |
 | 분석 자료 추출 | USB에서 한 번 실행, 선택한 순정 파일을 USB에 복사 |
 | 플랩 제어 API·값·자동 복귀 | 미확인 / 미구현 |
-| 실차 검증 | 미실시 |
+| 실차 검증 | v0.2.1 파일 추출 완료 확인. v0.3.0 추출과 플랩 제어는 미검증 |
 
 ## USB에서 분석 자료 만들기
 
@@ -67,9 +69,11 @@ v0.2.1 보완 추출이 실차에서 정상 완료됐고, 차량 서비스 구�
 
 2026-11-19 후속 조사에서는 제공된 회로도의 ECM `AEV 컨트롤` 연결과 공개 정비·액추에이터 자료를 대조했습니다. 인접 N 차종의 PWM 자료는 찾았지만 한국 CN7N PE의 강제 개폐·해제 명령은 확인하지 못했습니다. [AEV 회로·ECU 진단 자료와 적용 한계](docs/AEV-ECU-RESEARCH-KO.md)
 
+추가 정적 분석에서는 일반 MICOM 메시지를 보내는 `IMicomDataService.sendMicomData()`를 확인했습니다. 다만 `requestDiagnose()`는 MICOM 정보 요청으로 명명되어 있으며 ECU 진단 중계인지 미확인입니다. 추가 하드웨어 없이 가능한지는 HCAN/네이티브·Engineering Mode 코드와 MICOM 이후 라우팅을 더 확인해야 합니다. [구현별 근거](docs/MICOM-SOFTWARE-PATH-KO.md)
+
 ## 개발과 검증
 
-Python 3.10 이상으로 `python build.py --services`를 실행하면 `dist/`에 보완 추출 USB ZIP과 `SHA256SUMS.txt`를 만듭니다. `python build.py`는 전체 수집 프로필을 만듭니다. ZIP은 고정된 파일 목록으로 만들며 제조사 바이너리나 수집 결과를 포함하지 않습니다.
+Python 3.10 이상으로 `python build.py --transport`를 실행하면 `dist/`에 v0.3.0 통신 경로 보완 USB ZIP과 `SHA256SUMS.txt`를 만듭니다. `--services`는 이전 서비스 보완, 옵션 없음은 이전 전체 수집 프로필입니다. ZIP은 고정된 파일 목록으로 만들며 제조사 바이너리나 수집 결과를 포함하지 않습니다.
 
 `python -m unittest discover -s tests -v`는 모의 헤드유닛에서 버전 거부, 추출 완료·누락·실패, 기존 결과 보존을 검증합니다. 셸 테스트에는 POSIX `sh`가 필요하며 Windows에서는 `TEST_SH`에 Git for Windows의 `sh.exe` 경로를 지정합니다. PC 테스트는 차량의 제어 가능성이나 실차 동작을 입증하지 않습니다.
 

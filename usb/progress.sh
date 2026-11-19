@@ -1,5 +1,6 @@
 #!/system/bin/sh
 # NEMESIS 1.16.7+ DialogActivity progress mode. No APK or service installation.
+COLLECTOR_VERSION=${COLLECTOR_VERSION:-0.2.1}
 PERCENT=0
 COPIED=0
 SKIPPED=0
@@ -39,7 +40,7 @@ run_bounded() {
 progress_snapshot() {
     [ -n "$OUT" ] || return 0
     {
-        echo "version=0.2.1"
+        echo "version=$COLLECTOR_VERSION"
         echo "state=$PROGRESS_STATE"
         echo "percent=$PERCENT"
         echo "percent_basis=completed_work_steps_not_bytes_or_time"
@@ -71,7 +72,7 @@ progress_text() {
         if [ "$CELL" -lt "$FILLED" ]; then BAR="${BAR}#"; else BAR="${BAR}-"; fi
         CELL=$((CELL + 1))
     done
-    MESSAGE="분석 파일 추출 v0.2.1 · ${PERCENT}%
+    MESSAGE="분석 파일 추출 v$COLLECTOR_VERSION · ${PERCENT}%
 [$BAR] 작업 단계 기준
 $STEP
 $DETAIL
@@ -126,7 +127,7 @@ progress_finish() {
     fi
     # No more writes to USB after the successful final sync.
     UI_LOG=/dev/null
-    progress_ui progress "분석 파일 추출 v0.2.1 · 100%
+    progress_ui progress "분석 파일 추출 v$COLLECTOR_VERSION · 100%
 [##########] 작업 단계 완료
 필수 파일 확인과 USB 저장 마무리 완료
 복사 $COPIED / 없음 $SKIPPED

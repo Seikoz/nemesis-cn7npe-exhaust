@@ -1,17 +1,16 @@
-CN7NPE KOR V039.001.260902용 **차량 서비스 보완 추출 v0.2.1**입니다. NEMESIS 1.16.7 이상이 필요합니다.
+CN7NPE 한국형 V039.001.260902용 **MICOM·HCAN 보완 추출 v0.3.0**입니다. NEMESIS 1.16.7 이상이 필요합니다.
 
-**이 버전에는 플랩 열림 / 닫힘 / 순정 자동 제어 기능이 없습니다.** 직접 제어 명령과 자동 복귀 방법이 확인되지 않아 제어판을 제공하지 않습니다. 현재 다운로드는 제어 기능 구현에 필요한 순정 앱·프레임워크를 비공개 분석용으로 추출합니다.
+**플랩 열림 / 닫힘 / 순정 자동 제어는 아직 구현되지 않았습니다.** 추가 하드웨어 없이 제어 가능한지 정적 분석하기 위한 파일 수집 도구입니다.
 
-- `NEMESIS-CN7NPE-Exhaust-Service-Research-v0.2.1-USB.zip`: 전체 파일을 USB 최상위에 풀고 주차 상태에서 연결 → NEMESIS 스크립트 실행 승인.
-- 기존 자료에서 빠진 `automotive-service.jar`/`.odex`만 복사합니다. 50MB N 모드 APK는 다시 복사하지 않습니다. 프레임워크 파일 이름 목록도 남깁니다.
-- 최종 결과를 작은 `result.txt`에 기록하도록 변경했습니다. 0.2.0 실차 기록은 16개 파일 복사 후 보고서 재작성 또는 저장 마무리 단계에서 실패했습니다. 정확한 원인은 아직 확정되지 않았으며, 이번 수정의 실차 재검증이 필요합니다. 스크립트 자체 오류 기록도 `collector-errors.log`에 남깁니다.
-- 퍼센트·10칸 문자 막대·5단계 작업·현재 파일·복사/없음 개수를 NEMESIS 팝업에 표시합니다. 퍼센트는 작업 단계 기준이며 시간이나 바이트 전송률이 아닙니다.
-- 필수 파일 검증과 USB 저장 마무리 뒤에만 100% 화면을 표시합니다. 그다음 NEMESIS 완료 알림까지 확인하고 USB를 분리하세요.
-- 파일 복사 60초, 앱 목록/경로 30초, 저장 마무리 60초의 명령 제한을 적용합니다. 오류·시간 초과·화면 갱신 실패 시 중단하며 100%를 표시하지 않습니다. 커널 수준 USB 입출력 정지는 종료가 더 늦어질 수 있습니다.
-- USB 결과 폴더에 마지막 상태 `progress.txt`, 단계 기록 `events.log`, 화면 호출 기록 `ui.log`를 저장합니다. 선택 파일의 `없음`은 그 자체로 오류가 아닙니다.
-- 시스템 파일 변경·차량 제어 명령·설치·자동 시작 서비스 없음. USB에 결과 폴더 생성.
-- 결과 `CN7NPE-exhaust-private-N/`은 제조사 바이너리를 포함하므로 개발 대화에만 비공개 첨부. 공개 GitHub에 업로드하지 마세요.
-- 결과 폴더를 이 PC의 `C:\Users\User\Desktop\nemesis-cn7npe-exhaust\private` 아래에 복사하면 대화 업로드 없이 로컬 분석할 수 있습니다.
-- 자세한 사용법은 ZIP의 `INSTALL-KO.md` 또는 저장소 README를 참고하세요.
+이번 분석에서 일반 MICOM 송신 인터페이스를 확인했습니다. 다만 MICOM 이후 엔진 ECU로의 전달과 AEV 강제 제어·해제 명령은 미확인입니다. [분석 근거](https://github.com/Seikoz/nemesis-cn7npe-exhaust/blob/main/docs/MICOM-SOFTWARE-PATH-KO.md)
 
-모의 헤드유닛에서 추출·거부·오류 처리와 ZIP 구조를 검증했습니다. 이 보완판의 실차 실행과 플랩 제어 가능성은 검증되지 않았습니다.
+- 자산: `NEMESIS-CN7NPE-Exhaust-Transport-Research-v0.3.0-USB.zip`. GitHub의 자동 Source code ZIP과 다릅니다.
+- ZIP 전체를 USB 최상위에 풀고 주차 상태에서 연결하여 NEMESIS 실행 질문에 동의합니다. [사용법](https://github.com/Seikoz/nemesis-cn7npe-exhaust/blob/main/usb/INSTALL-TRANSPORT-KO.md)
+- HCAN 확장 JAR/ODEX, Engineering 이름의 시스템 앱 ODEX, MICOM/HCAN/HSCAN 이름의 시스템 바이너리·라이브러리만 확인합니다. 50MB N 모드 APK는 다시 복사하지 않습니다.
+- 파일당 8MiB, 복사 코드 합계 24MiB 제한이며 초과 파일은 건너뛰고 기록합니다. 이름이 맞지 않거나 제한에 걸린 파일은 추가 분석에 필요할 수 있습니다.
+- 관련 서비스·프로세스·소켓 이름만 읽습니다. 차량 소켓 연결·MICOM/ECU 명령·시험 모드 진입·데몬 실행/중지·복사한 바이너리 실행·시스템 설정 변경은 하지 않습니다.
+- 퍼센트·5단계·현재 파일·복사/없음 개수를 표시합니다. **100% 뒤 NEMESIS 완료 알림까지 확인하고** USB를 분리하세요.
+- 최종 판정은 `result.txt`의 `collection=COMPLETE`입니다. 필수 HCAN ODEX 복사와 선택 대상 확인 완료이며, 모든 분석 입력 확보나 제어 성공은 아닙니다. `report.txt`의 `engineering_odex`, `native_files`, `skipped_files`도 확인합니다.
+- 새 결과 폴더를 이 PC의 `C:\Users\User\Desktop\nemesis-cn7npe-exhaust\private\transport-extra`에 복사하면 업로드 없이 로컬 분석할 수 있습니다. 제조사 원본·결과 폴더는 공개 GitHub에 올리지 마세요.
+
+모의 환경에서 파일 선택, 크기 제한, 오류 처리, 기존 결과 보존, USB ZIP 구조를 검증합니다. v0.3.0은 실차 미검증이며 기존 v0.2.1의 실차 추출 완료와 구분합니다. 커널 수준 USB 입출력 정지는 명령 제한보다 오래 걸릴 수 있습니다.
